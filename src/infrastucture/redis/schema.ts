@@ -1,18 +1,12 @@
 import { RediSearchSchema, SchemaFieldTypes } from 'redis';
 
 export const producerSchema: RediSearchSchema = {
-  '$.id': {
-    type: SchemaFieldTypes.TEXT,
-  },
   '$.name': {
     type: SchemaFieldTypes.TEXT,
   },
 };
 
 export const consumerSchema: RediSearchSchema = {
-  '$.id': {
-    type: SchemaFieldTypes.TEXT,
-  },
   '$.name': {
     type: SchemaFieldTypes.TEXT,
   },
