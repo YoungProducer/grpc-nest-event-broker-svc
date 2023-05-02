@@ -1,7 +1,8 @@
 import { Module } from '@nestjs/common';
+import { RedisModule } from './infrastucture/redis/redis.module';
 
 @Module({
-  imports: [],
+  imports: [RedisModule],
   controllers: [],
   providers: [],
 })
