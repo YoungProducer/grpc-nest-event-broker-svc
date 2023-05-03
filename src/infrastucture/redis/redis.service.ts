@@ -1,9 +1,9 @@
-import { Injectable, OnModuleInit } from '@nestjs/common';
+import { Injectable, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { RedisClientType, createClient } from 'redis';
 import { consumerSchema, producerSchema } from './schema';
 
 @Injectable()
-export class RedisService implements OnModuleInit {
+export class RedisService implements OnModuleInit, OnModuleDestroy {
   private readonly redisClient: RedisClientType;
 
   constructor() {
@@ -14,6 +14,10 @@ export class RedisService implements OnModuleInit {
     await this.redisClient.connect();
 
     await this.initIndices();
+  }
+
+  async onModuleDestroy(): Promise<void> {
+    await this.redisClient.quit();
   }
 
   private async initIndices(): Promise<void> {
