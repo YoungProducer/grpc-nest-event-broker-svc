@@ -19,7 +19,7 @@ export class ProducerResponseDto implements GetAllProducersResponse_Producer {
 export class GetAllProducersResponseDto implements GetAllProducersResponse {
   @Expose()
   @Type(() => ProducerResponseDto)
-  producers: GetAllProducersResponse_Producer[];
+  producers: ProducerResponseDto[];
 
   @Expose()
   status: number;
