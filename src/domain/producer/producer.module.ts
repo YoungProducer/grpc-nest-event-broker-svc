@@ -5,7 +5,7 @@ import { ProducerController } from './producer.controller';
 import { RedisModule } from 'src/infrastucture/redis/redis.module';
 
 @Module({
-  imports: [RedisModule],
+  imports: [RedisModule.register()],
   controllers: [ProducerController],
   providers: [ProducerService],
 })

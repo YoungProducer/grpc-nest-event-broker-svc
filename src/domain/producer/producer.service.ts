@@ -1,4 +1,4 @@
-import { Injectable, OnModuleInit } from '@nestjs/common';
+import { Inject, Injectable, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { RedisClientType } from 'redis';
 import { randomUUID } from 'node:crypto';
@@ -7,7 +7,6 @@ import {
   EnvVars,
   EventBrokerCfg,
 } from 'src/config/interfaces/env-vars.interface';
-import { RedisService } from 'src/infrastucture/redis/redis.service';
 import {
   AddProducerRequest,
   AddProducerResponse,
@@ -16,21 +15,24 @@ import {
   ProduceEventResponse,
 } from 'src/proto/event-broker.pb';
 import { ProducerResponseDto } from './dto/get-all-producers.response.dto';
+import { DI_REDIS } from 'src/infrastucture/redis/constants';
+import { RedisClientModuleGetter } from 'src/infrastucture/redis/interfaces';
 
 @Injectable()
 export class ProducerService implements OnModuleInit {
-  private redisClient: RedisClientType;
   private streamKey: string;
   private eventBrokerCfg: EventBrokerCfg;
+  private redisClient: RedisClientType;
 
   constructor(
     private readonly configService: ConfigService<EnvVars>,
 
-    private readonly redisService: RedisService,
+    @Inject(DI_REDIS)
+    private readonly redisClientGetter: RedisClientModuleGetter,
   ) {}
 
-  onModuleInit() {
-    this.redisClient = this.redisService.getClient();
+  async onModuleInit(): Promise<void> {
+    this.redisClient = await this.redisClientGetter();
     this.streamKey = this.configService.get<string>('events_stream_key');
     this.eventBrokerCfg =
       this.configService.get<EventBrokerCfg>('event_broker_cfg');
@@ -79,7 +81,7 @@ export class ProducerService implements OnModuleInit {
     await this.redisClient.xAdd(this.streamKey, '*', {
       producerId,
       event,
-      data: data,
+      data,
     });
 
     return {
