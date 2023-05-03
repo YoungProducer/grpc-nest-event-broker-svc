@@ -4,7 +4,7 @@ import { ConsumerService } from './consumer.service';
 import { RedisModule } from 'src/infrastucture/redis/redis.module';
 
 @Module({
-  imports: [RedisModule],
+  imports: [RedisModule.register()],
   controllers: [ConsumerController],
   providers: [ConsumerService],
 })
