@@ -109,7 +109,7 @@ export interface EventBrokerServiceClient {
 
   getAllConsumers(request: EmptyMessage): Observable<GetAllConsumersResponse>;
 
-  produceEvent(request: Observable<ProduceEventRequest>): Observable<ProduceEventResponse>;
+  produceEvent(request: ProduceEventRequest): Observable<ProduceEventResponse>;
 
   consumeEvent(request: Observable<ConsumeEventRequest>): Observable<ConsumerEventResponse>;
 }
@@ -139,7 +139,9 @@ export interface EventBrokerServiceController {
     request: EmptyMessage,
   ): Promise<GetAllConsumersResponse> | Observable<GetAllConsumersResponse> | GetAllConsumersResponse;
 
-  produceEvent(request: Observable<ProduceEventRequest>): Observable<ProduceEventResponse>;
+  produceEvent(
+    request: ProduceEventRequest,
+  ): Promise<ProduceEventResponse> | Observable<ProduceEventResponse> | ProduceEventResponse;
 
   consumeEvent(request: Observable<ConsumeEventRequest>): Observable<ConsumerEventResponse>;
 }
@@ -153,12 +155,13 @@ export function EventBrokerServiceControllerMethods() {
       "removeConsumer",
       "getAllProducers",
       "getAllConsumers",
+      "produceEvent",
     ];
     for (const method of grpcMethods) {
       const descriptor: any = Reflect.getOwnPropertyDescriptor(constructor.prototype, method);
       GrpcMethod("EventBrokerService", method)(constructor.prototype[method], method, descriptor);
     }
-    const grpcStreamMethods: string[] = ["produceEvent", "consumeEvent"];
+    const grpcStreamMethods: string[] = ["consumeEvent"];
     for (const method of grpcStreamMethods) {
       const descriptor: any = Reflect.getOwnPropertyDescriptor(constructor.prototype, method);
       GrpcStreamMethod("EventBrokerService", method)(constructor.prototype[method], method, descriptor);
