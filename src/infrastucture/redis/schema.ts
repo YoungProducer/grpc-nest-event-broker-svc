@@ -10,8 +10,7 @@ export const consumerSchema: RediSearchSchema = {
   '$.name': {
     type: SchemaFieldTypes.TEXT,
   },
-  '$.producer': {
+  '$.events': {
     type: SchemaFieldTypes.TEXT,
-    AS: 'producer_id',
   },
 };
