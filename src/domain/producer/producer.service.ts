@@ -17,6 +17,8 @@ import {
 import { ProducerResponseDto } from './dto/get-all-producers.response.dto';
 import { DI_REDIS } from 'src/infrastucture/redis/constants';
 import { RedisClientModuleGetter } from 'src/infrastucture/redis/interfaces';
+import { getOccurenciesNumber } from 'src/utils/get-occurencies-number';
+import { ProducerIndex } from './interfaces/producer-index';
 
 @Injectable()
 export class ProducerService implements OnModuleInit {
@@ -42,6 +44,21 @@ export class ProducerService implements OnModuleInit {
     name,
     events,
   }: AddProducerRequest): Promise<AddProducerResponse> {
+    const isRegistered = await this.isProducerRegistered(name);
+
+    if (isRegistered) {
+      return {
+        error: 'Producer already exist',
+        producerId: null,
+        status: 400,
+      };
+    }
+
+    // create all groups based on events that producer can generate
+    await Promise.allSettled(
+      events.map((event) => this.createGroup(name, event)),
+    );
+
     const producerId = randomUUID();
     const producerKey = `${this.eventBrokerCfg.producer_prefix}:${producerId}`;
 
@@ -57,10 +74,52 @@ export class ProducerService implements OnModuleInit {
     };
   }
 
+  // makes a consumer's group with given params
+  // and creates a stream if it doesn't exist
+  // most of the time the "streamKey" should be a "producerId"
+  // and "groupName" an "event" name
+  async createGroup(streamKey: string, groupName: string): Promise<void> {
+    try {
+      await this.redisClient.xGroupCreate(streamKey, groupName, '0', {
+        MKSTREAM: true,
+      });
+    } catch (e) {
+      console.error(e);
+    }
+  }
+
+  async isProducerRegistered(nameOrId: string): Promise<ProducerIndex | false> {
+    // 4 is number of '-' in UUID
+    const isId = getOccurenciesNumber(nameOrId, '-') === 4;
+
+    // if value is id then try to get from json by id
+    if (isId) {
+      const producer = await this.redisClient.json.get(nameOrId);
+
+      return (producer as unknown as ProducerIndex) ?? false;
+    }
+
+    // if value is not id search by producer's name
+    const searchRes = await this.redisClient.ft.search(
+      'idx:producers',
+      nameOrId,
+    );
+
+    if (searchRes.total === 0) return false;
+
+    return searchRes.documents[0].value as unknown as ProducerIndex;
+  }
+
+  async canProduceEvent(id: string, event: string) {
+    const producer = await this.isProducerRegistered(id);
+
+    if (!producer) return false;
+
+    return producer.events.includes(event);
+  }
+
   async getAllProducers(): Promise<GetAllProducersResponse> {
     const res = await this.redisClient.ft.search('idx:producers', '*');
-
-    res.documents.forEach(console.log);
 
     const producers = res.documents.map(
       ({ id, value }) => ({ id, ...value } as unknown as ProducerResponseDto),
