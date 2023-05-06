@@ -19,6 +19,7 @@ import { DI_REDIS } from 'src/infrastucture/redis/constants';
 import { RedisClientModuleGetter } from 'src/infrastucture/redis/interfaces';
 import { getOccurenciesNumber } from 'src/utils/get-occurencies-number';
 import { ProducerIndex } from './interfaces/producer-index';
+import { producerServiceErrorMsgs } from './constants/error-messages';
 
 @Injectable()
 export class ProducerService implements OnModuleInit {
@@ -110,12 +111,17 @@ export class ProducerService implements OnModuleInit {
     return searchRes.documents[0].value as unknown as ProducerIndex;
   }
 
-  async canProduceEvent(id: string, event: string) {
+  // returns "true" if producer can produce event
+  // returns "string" as reason if can't
+  async canProduceEvent(id: string, event: string): Promise<true | string> {
     const producer = await this.isProducerRegistered(id);
 
-    if (!producer) return false;
+    if (!producer) return producerServiceErrorMsgs.notRegistered(id);
 
-    return producer.events.includes(event);
+    if (!producer.events.includes(event))
+      return producerServiceErrorMsgs.cannotProduceThisEvent(event);
+
+    return true;
   }
 
   async getAllProducers(): Promise<GetAllProducersResponse> {
