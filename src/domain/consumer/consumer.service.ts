@@ -33,6 +33,10 @@ import { ConsumeEventResponseDto } from './dto/consume-event.response.dto';
 import { EventBrokerEvent } from 'src/types/event';
 import { StreamsMessagesReply } from 'src/types/redis-types';
 import { ServerUnaryCall } from '@grpc/grpc-js';
+import { CreateConsumerInGroupPayload } from './interfaces/create-consumer-in-group';
+import { CanConsumeEventPayload } from './interfaces/can-consume-event';
+import { ProducerService } from '../producer/producer.service';
+import { ConsumerIndex } from './interfaces/consumer-index';
 
 @Injectable()
 export class ConsumerService implements OnModuleInit {
@@ -42,6 +46,8 @@ export class ConsumerService implements OnModuleInit {
 
   constructor(
     private readonly configService: ConfigService<EnvVars>,
+
+    private readonly producerService: ProducerService,
 
     @Inject(DI_REDIS)
     private readonly redisClientGetter: RedisClientModuleGetter,
@@ -71,6 +77,41 @@ export class ConsumerService implements OnModuleInit {
       consumerId,
       status: 201,
     };
+  }
+
+  async createConsumerInGroup({
+    streamKey,
+    groupName,
+    consumerId,
+  }: CreateConsumerInGroupPayload) {
+    await this.redisClient.xGroupCreateConsumer(
+      streamKey,
+      groupName,
+      consumerId,
+    );
+  }
+
+  async canConsumeEvent({
+    consumerId,
+    producerId,
+    event,
+  }: CanConsumeEventPayload): Promise<boolean> {
+    const consumer = (await this.redisClient.json.get(
+      consumerId,
+    )) as unknown as ConsumerIndex;
+
+    if (!consumer) return false;
+
+    if (!consumer.events.includes(event)) return false;
+
+    const eventCanBeProduced = await this.producerService.canProduceEvent(
+      producerId,
+      event,
+    );
+
+    if (!eventCanBeProduced) return false;
+
+    return true;
   }
 
   async getAllConsumers(): Promise<GetAllConsumersResponseDto> {

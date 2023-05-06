@@ -8,5 +8,6 @@ import { RedisModule } from 'src/infrastucture/redis/redis.module';
   imports: [RedisModule.register()],
   controllers: [ProducerController],
   providers: [ProducerService],
+  exports: [ProducerService],
 })
 export class ProducerModule {}
