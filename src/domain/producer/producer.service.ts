@@ -113,10 +113,17 @@ export class ProducerService implements OnModuleInit {
 
   // returns "true" if producer can produce event
   // returns "string" as reason if can't
-  async canProduceEvent(id: string, event: string): Promise<true | string> {
-    const producer = await this.isProducerRegistered(id);
+  async canProduceEvent(
+    nameOrId: string,
+    event: string,
+  ): Promise<true | string> {
+    // 4 is number of '-' in UUID
+    const isId = getOccurenciesNumber(nameOrId, '-') === 4;
 
-    if (!producer) return producerServiceErrorMsgs.notRegistered(id);
+    const producer = await this.isProducerRegistered(nameOrId);
+
+    if (!producer)
+      return producerServiceErrorMsgs.notRegistered(nameOrId, isId);
 
     if (!producer.events.includes(event))
       return producerServiceErrorMsgs.cannotProduceThisEvent(event);
