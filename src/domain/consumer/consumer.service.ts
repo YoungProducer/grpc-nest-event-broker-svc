@@ -34,7 +34,6 @@ import { EventBrokerEvent } from 'src/types/event';
 import { StreamsMessagesReply } from 'src/types/redis-types';
 import { ServerUnaryCall } from '@grpc/grpc-js';
 import { CreateConsumerInGroupPayload } from './interfaces/create-consumer-in-group';
-import { CanConsumeEventPayload } from './interfaces/can-consume-event';
 import { ProducerService } from '../producer/producer.service';
 import { ConsumerIndex } from './interfaces/consumer-index';
 
@@ -92,10 +91,10 @@ export class ConsumerService implements OnModuleInit {
   }
 
   async canConsumeEvent({
+    producerName,
     consumerId,
-    producerId,
     event,
-  }: CanConsumeEventPayload): Promise<boolean> {
+  }: ConsumeEventRequestDto): Promise<boolean> {
     const consumer = (await this.redisClient.json.get(
       consumerId,
     )) as unknown as ConsumerIndex;
@@ -105,7 +104,7 @@ export class ConsumerService implements OnModuleInit {
     if (!consumer.events.includes(event)) return false;
 
     const eventCanBeProduced = await this.producerService.canProduceEvent(
-      producerId,
+      producerName,
       event,
     );
 
