@@ -7,4 +7,12 @@ export class ConsumeEventRequestDto implements ConsumeEventRequest {
   @Expose()
   @IsString()
   event: string;
+
+  @Expose()
+  @IsString()
+  producerName: string;
+
+  @Expose()
+  @IsString()
+  consumerId: string;
 }
