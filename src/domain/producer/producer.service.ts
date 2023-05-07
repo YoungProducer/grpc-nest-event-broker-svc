@@ -1,4 +1,4 @@
-import { Inject, Injectable, OnModuleInit } from '@nestjs/common';
+import { Inject, Injectable, OnModuleInit, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { RedisClientType } from 'redis';
 import { randomUUID } from 'node:crypto';
@@ -25,6 +25,7 @@ export class ProducerService implements OnModuleInit {
   private streamKey: string;
   private eventBrokerCfg: EventBrokerCfg;
   private redisClient: RedisClientType;
+  private readonly logger = new Logger(ProducerService.name);
 
   constructor(
     private readonly configService: ConfigService<EnvVars>,
@@ -59,12 +60,19 @@ export class ProducerService implements OnModuleInit {
     );
 
     const producerId = randomUUID();
-    const producerKey = `${this.eventBrokerCfg.producer_prefix}:${producerId}`;
+    const producerKey = this.getProducerJSONKey(producerId);
 
     await this.redisClient.json.set(producerKey, '$', {
       name,
       events,
     });
+
+    this.logger.log(
+      'Producer was registered with name: %s and id: %s. Might produce events: %s.',
+      name,
+      producerId,
+      events.join(', '),
+    );
 
     return {
       error: null,
@@ -93,7 +101,9 @@ export class ProducerService implements OnModuleInit {
 
     // if value is id then try to get from json by id
     if (isId) {
-      const producer = await this.redisClient.json.get(nameOrId);
+      const producer = await this.redisClient.json.get(
+        this.getProducerJSONKey(nameOrId),
+      );
 
       return (producer as unknown as ProducerIndex) ?? false;
     }
@@ -101,8 +111,10 @@ export class ProducerService implements OnModuleInit {
     // if value is not id search by producer's name
     const searchRes = await this.redisClient.ft.search(
       'idx:producers',
-      nameOrId,
+      `@name:${nameOrId}`,
     );
+
+    this.logger.log(searchRes);
 
     if (searchRes.total === 0) return false;
 
@@ -142,5 +154,9 @@ export class ProducerService implements OnModuleInit {
       status: 200,
       producers,
     };
+  }
+
+  private getProducerJSONKey(id: string): string {
+    return `${this.eventBrokerCfg.producer_prefix}:${id}`;
   }
 }

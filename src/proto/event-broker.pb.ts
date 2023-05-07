@@ -73,7 +73,7 @@ export interface GetAllConsumersResponse_Consumer {
 }
 
 export interface ProduceEventRequest {
-  producerId: string;
+  producerName: string;
   event: string;
   data: string;
 }

@@ -1,4 +1,4 @@
-import { Inject, Injectable, OnModuleInit } from '@nestjs/common';
+import { Inject, Injectable, OnModuleInit, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { RedisClientType } from 'redis';
 import { randomUUID } from 'node:crypto';
@@ -30,6 +30,7 @@ export class ConsumerService implements OnModuleInit {
   private streamKey: string;
   private eventBrokerCfg: EventBrokerCfg;
   private redisClient: RedisClientType;
+  private readonly logger = new Logger(ConsumerService.name);
 
   constructor(
     private readonly configService: ConfigService<EnvVars>,
@@ -50,12 +51,19 @@ export class ConsumerService implements OnModuleInit {
     events,
   }: AddConsumerRequest): Promise<AddConsumerResponse> {
     const consumerId = randomUUID();
-    const consumerKey = `${this.eventBrokerCfg.consumer_prefix}:${consumerId}`;
+    const consumerKey = this.getConsumerJSONKey(consumerId);
 
     await this.redisClient.json.set(consumerKey, '$', {
       name,
       events,
     });
+
+    this.logger.log(
+      'Consumer was registered with name: %s and id: %s. Subscribed for events: %s.',
+      name,
+      consumerId,
+      events.join(', '),
+    );
 
     return {
       error: null,
@@ -90,7 +98,7 @@ export class ConsumerService implements OnModuleInit {
     event,
   }: ConsumeEventRequestDto): Promise<true> {
     const consumer = (await this.redisClient.json.get(
-      consumerId,
+      this.getConsumerJSONKey(consumerId),
     )) as unknown as ConsumerIndex;
 
     if (!consumer)
@@ -118,5 +126,9 @@ export class ConsumerService implements OnModuleInit {
       error: null,
       consumers,
     };
+  }
+
+  private getConsumerJSONKey(id: string): string {
+    return `${this.eventBrokerCfg.consumer_prefix}:${id}`;
   }
 }

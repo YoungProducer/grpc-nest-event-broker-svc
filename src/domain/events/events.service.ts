@@ -1,4 +1,4 @@
-import { Inject, Injectable, OnModuleInit } from '@nestjs/common';
+import { Inject, Injectable, OnModuleInit, Logger } from '@nestjs/common';
 import { RedisClientType } from 'redis';
 import {
   BehaviorSubject,
@@ -32,6 +32,7 @@ import { combinerGenerator } from '../../utils/combine-functions';
 export class EventsService implements OnModuleInit {
   private redisConsumingClient: RedisClientType;
   private redisProducingClient: RedisClientType;
+  private readonly logger = new Logger(EventsService.name);
 
   constructor(
     private readonly consumerService: ConsumerService,
@@ -48,11 +49,17 @@ export class EventsService implements OnModuleInit {
   async produceEvent({
     data,
     event,
-    producerId,
+    producerName,
   }: ProduceEventRequest): Promise<ProduceEventResponse> {
-    await this.producerService.canProduceEvent(producerId, event);
+    await this.producerService.canProduceEvent(producerName, event);
 
-    await this.redisProducingClient.xAdd(producerId, '*', { data });
+    await this.redisProducingClient.xAdd(producerName, '*', { data });
+
+    this.logger.log(
+      'Event %s was producer by producer: %s',
+      event,
+      producerName,
+    );
 
     return {
       status: 200,
@@ -96,12 +103,25 @@ export class EventsService implements OnModuleInit {
       consumerId,
     });
 
-    const delConsumer = async () =>
+    this.logger.log(
+      'Consumer with ID: %s is now consuming event: %s.',
+      consumerId,
+      event,
+    );
+
+    const delConsumer = async () => {
       await this.consumerService.deleteConsumerFromGroup({
         streamKey: producerName,
         groupName: event,
         consumerId,
       });
+
+      this.logger.log(
+        `Consumer with ID: %s has unsubscribed from group: %s`,
+        consumerId,
+        event,
+      );
+    };
 
     const unsubscribeCombiner = combinerGenerator();
 

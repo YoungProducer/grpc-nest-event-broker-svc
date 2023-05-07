@@ -6,7 +6,7 @@ import { ProduceEventRequest } from 'src/proto/event-broker.pb';
 export class ProduceEventRequestDto implements ProduceEventRequest {
   @Expose()
   @IsString()
-  producerId: string;
+  producerName: string;
 
   @Expose()
   @IsString()
