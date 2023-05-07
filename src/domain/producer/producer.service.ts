@@ -114,8 +114,6 @@ export class ProducerService implements OnModuleInit {
       `@name:${nameOrId}`,
     );
 
-    this.logger.log(searchRes);
-
     if (searchRes.total === 0) return false;
 
     return searchRes.documents[0].value as unknown as ProducerIndex;
