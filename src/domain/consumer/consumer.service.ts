@@ -36,6 +36,8 @@ import { ServerUnaryCall } from '@grpc/grpc-js';
 import { CreateConsumerInGroupPayload } from './interfaces/create-consumer-in-group';
 import { ProducerService } from '../producer/producer.service';
 import { ConsumerIndex } from './interfaces/consumer-index';
+import { RpcException } from '@nestjs/microservices';
+import { consumerServiceErrorMsgs } from './constants/error-messages';
 
 @Injectable()
 export class ConsumerService implements OnModuleInit {
@@ -94,21 +96,22 @@ export class ConsumerService implements OnModuleInit {
     producerName,
     consumerId,
     event,
-  }: ConsumeEventRequestDto): Promise<boolean> {
+  }: ConsumeEventRequestDto): Promise<true> {
     const consumer = (await this.redisClient.json.get(
       consumerId,
     )) as unknown as ConsumerIndex;
 
-    if (!consumer) return false;
+    if (!consumer)
+      throw new RpcException(
+        consumerServiceErrorMsgs.notRegistered(consumerId),
+      );
 
-    if (!consumer.events.includes(event)) return false;
+    if (!consumer.events.includes(event))
+      throw new RpcException(
+        consumerServiceErrorMsgs.eventNotRegistered(consumerId, event),
+      );
 
-    const eventCanBeProduced = await this.producerService.canProduceEvent(
-      producerName,
-      event,
-    );
-
-    return typeof eventCanBeProduced !== 'string';
+    return await this.producerService.canProduceEvent(producerName, event);
   }
 
   async getAllConsumers(): Promise<GetAllConsumersResponseDto> {
