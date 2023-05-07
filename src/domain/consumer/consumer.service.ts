@@ -108,9 +108,7 @@ export class ConsumerService implements OnModuleInit {
       event,
     );
 
-    if (!eventCanBeProduced) return false;
-
-    return true;
+    return typeof eventCanBeProduced !== 'string';
   }
 
   async getAllConsumers(): Promise<GetAllConsumersResponseDto> {
