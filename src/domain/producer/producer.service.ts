@@ -11,8 +11,6 @@ import {
   AddProducerRequest,
   AddProducerResponse,
   GetAllProducersResponse,
-  ProduceEventRequest,
-  ProduceEventResponse,
 } from 'src/proto/event-broker.pb';
 import { ProducerResponseDto } from './dto/get-all-producers.response.dto';
 import { DI_REDIS } from 'src/infrastucture/redis/constants';
@@ -30,7 +28,6 @@ export class ProducerService implements OnModuleInit {
 
   constructor(
     private readonly configService: ConfigService<EnvVars>,
-
     @Inject(DI_REDIS)
     private readonly redisClientGetter: RedisClientModuleGetter,
   ) {}
@@ -144,23 +141,6 @@ export class ProducerService implements OnModuleInit {
       error: null,
       status: 200,
       producers,
-    };
-  }
-
-  async produceEvent({
-    producerId,
-    data,
-    event,
-  }: ProduceEventRequest): Promise<ProduceEventResponse> {
-    await this.redisClient.xAdd(this.streamKey, '*', {
-      producerId,
-      event,
-      data,
-    });
-
-    return {
-      status: 201,
-      error: null,
     };
   }
 }
