@@ -1,0 +1,162 @@
+import { Inject, Injectable, OnModuleInit } from '@nestjs/common';
+import { RedisClientType } from 'redis';
+import {
+  BehaviorSubject,
+  Observable,
+  filter,
+  from,
+  map,
+  mergeMap,
+  of,
+  tap,
+  zip,
+} from 'rxjs';
+
+import {
+  ConsumeEventRequest,
+  ConsumeEventResponse,
+  ProduceEventRequest,
+  ProduceEventResponse,
+} from 'src/proto/event-broker.pb';
+import { DI_REDIS } from 'src/infrastucture/redis/constants';
+import { RedisClientModuleGetter } from 'src/infrastucture/redis/interfaces';
+import { EventBrokerEvent } from 'src/types/event';
+import { StreamsMessagesReply } from 'src/types/redis-types';
+import { ConsumerService } from '../consumer/consumer.service';
+import { ProducerService } from '../producer/producer.service';
+import { GetReadStreamPayload } from './interfaces/get-read-stream-payload.interface';
+import { GetEventConsumerResult } from './interfaces/get-event-consumer.response.interface';
+import { combinerGenerator } from '../../utils/combine-functions';
+
+@Injectable()
+export class EventsService implements OnModuleInit {
+  private redisConsumingClient: RedisClientType;
+  private redisProducingClient: RedisClientType;
+
+  constructor(
+    private readonly consumerService: ConsumerService,
+    private readonly producerService: ProducerService,
+    @Inject(DI_REDIS)
+    private readonly redisClientGetter: RedisClientModuleGetter,
+  ) {}
+
+  async onModuleInit(): Promise<void> {
+    this.redisConsumingClient = await this.redisClientGetter();
+    this.redisProducingClient = await this.redisClientGetter();
+  }
+
+  async produceEvent({
+    data,
+    event,
+    producerId,
+  }: ProduceEventRequest): Promise<ProduceEventResponse> {
+    await this.producerService.canProduceEvent(producerId, event);
+
+    await this.redisProducingClient.xAdd(producerId, '*', { data });
+
+    return {
+      status: 200,
+      error: null,
+    };
+  }
+
+  private async getReadStream({
+    streamKey,
+    id,
+    group,
+    consumerId,
+  }: GetReadStreamPayload) {
+    return await this.redisConsumingClient.xReadGroup(
+      group,
+      consumerId,
+      {
+        key: streamKey,
+        id,
+      },
+      {
+        BLOCK: 1000,
+      },
+    );
+  }
+
+  async getEventConsumer({
+    producerName,
+    consumerId,
+    event,
+  }: ConsumeEventRequest): Promise<GetEventConsumerResult> {
+    await this.consumerService.canConsumeEvent({
+      producerName,
+      consumerId,
+      event,
+    });
+
+    await this.consumerService.createConsumerInGroup({
+      streamKey: producerName,
+      groupName: event,
+      consumerId,
+    });
+
+    const delConsumer = async () =>
+      await this.consumerService.deleteConsumerFromGroup({
+        streamKey: producerName,
+        groupName: event,
+        consumerId,
+      });
+
+    const unsubscribeCombiner = combinerGenerator();
+
+    const streamObserver = new Observable<ConsumeEventResponse>((observer) => {
+      const load = new BehaviorSubject('$');
+
+      const subscription = load
+        .pipe(
+          mergeMap((id) =>
+            zip(
+              from(
+                this.getReadStream({
+                  streamKey: producerName,
+                  consumerId,
+                  id,
+                  group: event,
+                }),
+              ),
+              of(id),
+            ),
+          ),
+
+          tap(([data, prev_id]: [StreamsMessagesReply, string]) => {
+            const id = data !== null ? data[0].messages[0].id : prev_id;
+
+            load.next(`${id}`);
+          }),
+
+          filter(([data]: [StreamsMessagesReply, string]) => data !== null),
+
+          map(
+            ([data]: [StreamsMessagesReply, string]) =>
+              data as NonNullable<StreamsMessagesReply>,
+          ),
+
+          map(
+            (data: NonNullable<StreamsMessagesReply>) =>
+              data[0].messages[0].message as unknown as EventBrokerEvent,
+          ),
+        )
+        .subscribe(({ data }) =>
+          observer.next({
+            data,
+            error: null,
+            status: 200,
+          }),
+        );
+
+      unsubscribeCombiner.add(subscription.unsubscribe);
+      unsubscribeCombiner.add(delConsumer);
+    });
+
+    return {
+      observer: streamObserver,
+      unsubscribe: unsubscribeCombiner.execute,
+    };
+  }
+}

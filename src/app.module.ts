@@ -4,12 +4,14 @@ import { ConfigModule } from '@nestjs/config';
 import configuration from './config/configuration';
 import { ProducerModule } from './domain/producer/producer.module';
 import { ConsumerModule } from './domain/consumer/consumer.module';
+import { EventsModule } from './domain/events/events.module';
 
 @Module({
   imports: [
     RedisModule,
     ProducerModule,
     ConsumerModule,
+    EventsModule,
     ConfigModule.forRoot({
       load: [configuration],
       isGlobal: true,
