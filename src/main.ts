@@ -2,6 +2,7 @@ import { NestFactory } from '@nestjs/core';
 import { INestMicroservice, ValidationPipe } from '@nestjs/common';
 import { Transport } from '@nestjs/microservices';
 import { join } from 'node:path';
+import { Logger } from 'nestjs-pino';
 
 import { AppModule } from './app.module';
 import { protobufPackage } from './proto/event-broker.pb';
@@ -19,12 +20,15 @@ async function bootstrap() {
           'node_modules/grpc-nest-proto/proto/event-broker.proto',
         ),
       },
+      bufferLogs: true,
     },
   );
 
+  app.useLogger(app.get(Logger));
   app.useGlobalFilters(new ExceptionFilter());
   app.useGlobalPipes(new ValidationPipe({ transform: true, whitelist: true }));
 
   await app.listen();
 }
+
 bootstrap();
