@@ -38,6 +38,7 @@ import { ProducerService } from '../producer/producer.service';
 import { ConsumerIndex } from './interfaces/consumer-index';
 import { RpcException } from '@nestjs/microservices';
 import { consumerServiceErrorMsgs } from './constants/error-messages';
+import { DeleteConsumerFromGroupPayload } from './interfaces/delete-consumer-from-group';
 
 @Injectable()
 export class ConsumerService implements OnModuleInit {
@@ -90,6 +91,14 @@ export class ConsumerService implements OnModuleInit {
       groupName,
       consumerId,
     );
+  }
+
+  async deleteConsumerFromGroup({
+    streamKey,
+    consumerId,
+    group,
+  }: DeleteConsumerFromGroupPayload): Promise<void> {
+    await this.redisClient.xGroupDelConsumer(streamKey, group, consumerId);
   }
 
   async canConsumeEvent({
