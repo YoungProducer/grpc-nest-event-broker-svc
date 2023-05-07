@@ -20,6 +20,7 @@ import { RedisClientModuleGetter } from 'src/infrastucture/redis/interfaces';
 import { getOccurenciesNumber } from 'src/utils/get-occurencies-number';
 import { ProducerIndex } from './interfaces/producer-index';
 import { producerServiceErrorMsgs } from './constants/error-messages';
+import { RpcException } from '@nestjs/microservices';
 
 @Injectable()
 export class ProducerService implements OnModuleInit {
@@ -113,20 +114,21 @@ export class ProducerService implements OnModuleInit {
 
   // returns "true" if producer can produce event
   // returns "string" as reason if can't
-  async canProduceEvent(
-    nameOrId: string,
-    event: string,
-  ): Promise<true | string> {
+  async canProduceEvent(nameOrId: string, event: string): Promise<true> {
     // 4 is number of '-' in UUID
     const isId = getOccurenciesNumber(nameOrId, '-') === 4;
 
     const producer = await this.isProducerRegistered(nameOrId);
 
     if (!producer)
-      return producerServiceErrorMsgs.notRegistered(nameOrId, isId);
+      throw new RpcException(
+        producerServiceErrorMsgs.notRegistered(nameOrId, isId),
+      );
 
     if (!producer.events.includes(event))
-      return producerServiceErrorMsgs.cannotProduceThisEvent(event);
+      throw new RpcException(
+        producerServiceErrorMsgs.cannotProduceThisEvent(event),
+      );
 
     return true;
   }
