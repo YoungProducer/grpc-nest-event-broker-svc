@@ -126,7 +126,7 @@ export class EventsService implements OnModuleInit {
     const unsubscribeCombiner = combinerGenerator();
 
     const streamObserver = new Observable<ConsumeEventResponse>((observer) => {
-      const load = new BehaviorSubject('$');
+      const load = new BehaviorSubject('>');
 
       const subscription = load
         .pipe(
@@ -144,10 +144,25 @@ export class EventsService implements OnModuleInit {
             ),
           ),
 
-          tap(([data, prev_id]: [StreamsMessagesReply, string]) => {
-            const id = data !== null ? data[0].messages[0].id : prev_id;
+          tap(async ([data, prev_id]: [StreamsMessagesReply, string]) => {
+            this.logger.log(
+              `data: ${JSON.stringify(data)}, prev_id: ${prev_id}`,
+            );
+            if (data) {
+              this.logger.log(`messages: ${JSON.stringify(data[0].messages)}`);
+            }
 
-            load.next(`${id}`);
+            const entryId = data && data[0]?.messages[0]?.id;
+
+            if (entryId) {
+              await this.redisConsumingClient.xAck(
+                producerName,
+                event,
+                entryId,
+              );
+            }
+
+            load.next(`>`);
           }),
 
           filter(([data]: [StreamsMessagesReply, string]) => data !== null),
@@ -156,6 +171,8 @@ export class EventsService implements OnModuleInit {
             ([data]: [StreamsMessagesReply, string]) =>
               data as NonNullable<StreamsMessagesReply>,
           ),
+
+          filter((data) => data[0].messages.length > 0),
 
           map(
             (data: NonNullable<StreamsMessagesReply>) =>
@@ -170,7 +187,7 @@ export class EventsService implements OnModuleInit {
           }),
         );
 
-      unsubscribeCombiner.add(subscription.unsubscribe);
+      unsubscribeCombiner.add(() => subscription.unsubscribe());
       unsubscribeCombiner.add(delConsumer);
     });
 
