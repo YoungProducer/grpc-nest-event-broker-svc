@@ -17,12 +17,10 @@ import {
 } from './dto/get-all-consumers.response.dto';
 import { DI_REDIS } from 'src/infrastucture/redis/constants';
 import { RedisClientModuleGetter } from 'src/infrastucture/redis/interfaces';
-import { CreateConsumerInGroupPayload } from './interfaces/create-consumer-in-group';
 import { ProducerService } from '../producer/producer.service';
 import { ConsumerIndex } from './interfaces/consumer-index';
 import { RpcException } from '@nestjs/microservices';
 import { consumerServiceErrorMsgs } from './constants/error-messages';
-import { DeleteConsumerFromGroupPayload } from './interfaces/delete-consumer-from-group';
 import { ConsumeEventRequestDto } from '../events/dto/consume-event.request.dto';
 import { getOccurenciesNumber } from '../../utils/get-occurencies-number';
 
@@ -85,26 +83,6 @@ export class ConsumerService implements OnModuleInit {
       consumerId,
       status: 201,
     };
-  }
-
-  async createConsumerInGroup({
-    streamKey,
-    groupName,
-    consumerId,
-  }: CreateConsumerInGroupPayload) {
-    await this.redisClient.xGroupCreateConsumer(
-      streamKey,
-      groupName,
-      consumerId,
-    );
-  }
-
-  async deleteConsumerFromGroup({
-    streamKey,
-    consumerId,
-    groupName,
-  }: DeleteConsumerFromGroupPayload): Promise<void> {
-    await this.redisClient.xGroupDelConsumer(streamKey, groupName, consumerId);
   }
 
   async canConsumeEvent({

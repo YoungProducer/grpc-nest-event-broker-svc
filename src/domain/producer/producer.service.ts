@@ -58,11 +58,6 @@ export class ProducerService implements OnModuleInit {
       };
     }
 
-    // create all groups based on events that producer can generate
-    await Promise.allSettled(
-      events.map((event) => this.createGroup(name, event)),
-    );
-
     const producerId = randomUUID();
     const producerKey = this.getProducerJSONKey(producerId);
 
@@ -83,20 +78,6 @@ export class ProducerService implements OnModuleInit {
       producerId,
       status: 201,
     };
-  }
-
-  // makes a consumer's group with given params
-  // and creates a stream if it doesn't exist
-  // most of the time the "streamKey" should be a "producerId"
-  // and "groupName" an "event" name
-  async createGroup(streamKey: string, groupName: string): Promise<void> {
-    try {
-      await this.redisClient.xGroupCreate(streamKey, groupName, '0', {
-        MKSTREAM: true,
-      });
-    } catch (e) {
-      console.error(e);
-    }
   }
 
   async isProducerRegistered(nameOrId: string): Promise<ProducerIndex | false> {

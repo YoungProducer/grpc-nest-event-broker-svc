@@ -8,6 +8,8 @@ import {
   map,
   mergeMap,
   tap,
+  zip,
+  of,
 } from 'rxjs';
 
 import {
@@ -22,7 +24,6 @@ import { EventBrokerEvent } from 'src/types/event';
 import { StreamsMessagesReply } from 'src/types/redis-types';
 import { ConsumerService } from '../consumer/consumer.service';
 import { ProducerService } from '../producer/producer.service';
-import { GetReadStreamPayload } from './interfaces/get-read-stream-payload.interface';
 import { GetEventConsumerResult } from './interfaces/get-event-consumer.response.interface';
 import { combinerGenerator } from '../../utils/combine-functions';
 
@@ -51,7 +52,11 @@ export class EventsService implements OnModuleInit {
   }: ProduceEventRequest): Promise<ProduceEventResponse> {
     await this.producerService.canProduceEvent(producerName, event);
 
-    await this.redisProducingClient.xAdd(producerName, '*', { data });
+    await this.redisProducingClient.xAdd(
+      this.getStreamKey(producerName, event),
+      '*',
+      { data },
+    );
 
     this.logger.log(
       'Event %s was producer by producer: %s',
@@ -65,21 +70,15 @@ export class EventsService implements OnModuleInit {
     };
   }
 
-  private async getReadStream({
-    streamKey,
-    id,
-    group,
-    consumerId,
-  }: GetReadStreamPayload) {
-    return await this.redisConsumingClient.xReadGroup(
-      group,
-      consumerId,
+  private async getReadStream(streamKey: string, id: string) {
+    return await this.redisConsumingClient.xRead(
       {
         key: streamKey,
         id,
       },
       {
         BLOCK: 1000,
+        COUNT: 1,
       },
     );
   }
@@ -95,67 +94,40 @@ export class EventsService implements OnModuleInit {
       event,
     });
 
-    await this.consumerService.createConsumerInGroup({
-      streamKey: producerName,
-      groupName: event,
-      consumerId,
-    });
-
     this.logger.log(
       'Consumer with ID: %s is now consuming event: %s.',
       consumerId,
       event,
     );
 
-    const delConsumer = async () => {
-      await this.consumerService.deleteConsumerFromGroup({
-        streamKey: producerName,
-        groupName: event,
-        consumerId,
-      });
-
-      this.logger.log(
-        `Consumer with ID: %s has unsubscribed from group: %s`,
-        consumerId,
-        event,
-      );
-    };
-
     const unsubscribeCombiner = combinerGenerator();
 
     const streamObserver = new Observable<ConsumeEventResponse>((observer) => {
-      const load = new BehaviorSubject('>');
+      const load = new BehaviorSubject('$');
 
       const subscription = load
         .pipe(
           mergeMap((id) =>
-            from(
-              this.getReadStream({
-                streamKey: producerName,
-                consumerId,
-                id,
-                group: event,
-              }),
+            zip(
+              from(
+                this.getReadStream(this.getStreamKey(producerName, event), id),
+              ),
+              of(id),
             ),
           ),
 
-          tap(async (data: StreamsMessagesReply) => {
-            const entryId = data && data[0]?.messages[0]?.id;
+          tap(async ([data, prev_id]: [StreamsMessagesReply, string]) => {
+            const id = data !== null ? data[0].messages[0].id : prev_id;
 
-            if (entryId) {
-              await this.redisConsumingClient.xAck(
-                producerName,
-                event,
-                entryId,
-              );
-            }
-
-            load.next(`>`);
+            load.next(`${id}`);
           }),
 
-          filter((data: StreamsMessagesReply) => data !== null),
+          filter(([data]: [StreamsMessagesReply, string]) => data !== null),
 
-          filter((data) => data[0].messages.length > 0),
+          map(
+            ([data]: [StreamsMessagesReply, string]) =>
+              data as NonNullable<StreamsMessagesReply>,
+          ),
 
           map(
             (data: NonNullable<StreamsMessagesReply>) =>
@@ -172,12 +144,22 @@ export class EventsService implements OnModuleInit {
 
       // "() => subscription.unsubscribe()" needs to save observer context
       unsubscribeCombiner.add(() => subscription.unsubscribe());
-      unsubscribeCombiner.add(delConsumer);
+      unsubscribeCombiner.add(() =>
+        this.logger.log(
+          `Consumer with ID: %s has unsubscribed from event: %s`,
+          consumerId,
+          event,
+        ),
+      );
     });
 
     return {
       observer: streamObserver,
       unsubscribe: unsubscribeCombiner.execute,
     };
+  }
+
+  private getStreamKey(producerName: string, event: string): string {
+    return `${producerName}:${event}`;
   }
 }
