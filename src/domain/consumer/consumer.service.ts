@@ -24,6 +24,7 @@ import { RpcException } from '@nestjs/microservices';
 import { consumerServiceErrorMsgs } from './constants/error-messages';
 import { DeleteConsumerFromGroupPayload } from './interfaces/delete-consumer-from-group';
 import { ConsumeEventRequestDto } from '../events/dto/consume-event.request.dto';
+import { getOccurenciesNumber } from '../../utils/get-occurencies-number';
 
 @Injectable()
 export class ConsumerService implements OnModuleInit {
@@ -50,6 +51,20 @@ export class ConsumerService implements OnModuleInit {
     name,
     events,
   }: AddConsumerRequest): Promise<AddConsumerResponse> {
+    const isConsumerRegistered = await this.isConsumerRegistered(name);
+
+    if (isConsumerRegistered) {
+      const errorMessage = consumerServiceErrorMsgs.alreadyRegistered(name);
+
+      this.logger.error(errorMessage);
+
+      return {
+        status: 400,
+        error: errorMessage,
+        consumerId: null,
+      };
+    }
+
     const consumerId = randomUUID();
     const consumerKey = this.getConsumerJSONKey(consumerId);
 
@@ -126,6 +141,30 @@ export class ConsumerService implements OnModuleInit {
       error: null,
       consumers,
     };
+  }
+
+  async isConsumerRegistered(nameOrId: string): Promise<ConsumerIndex | false> {
+    // 4 is number of '-' in UUID
+    const isId = getOccurenciesNumber(nameOrId, '-') === 4;
+
+    // if value is id then try to get from json by id
+    if (isId) {
+      const consumer = await this.redisClient.json.get(
+        this.getConsumerJSONKey(nameOrId),
+      );
+
+      return (consumer as unknown as ConsumerIndex) ?? false;
+    }
+
+    // if value is not id search by producer's name
+    const searchRes = await this.redisClient.ft.search(
+      'idx:consumers',
+      `@name:${nameOrId}`,
+    );
+
+    if (searchRes.total === 0) return false;
+
+    return searchRes.documents[0].value as unknown as ConsumerIndex;
   }
 
   private getConsumerJSONKey(id: string): string {
