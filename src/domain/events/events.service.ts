@@ -7,9 +7,7 @@ import {
   from,
   map,
   mergeMap,
-  of,
   tap,
-  zip,
 } from 'rxjs';
 
 import {
@@ -131,27 +129,17 @@ export class EventsService implements OnModuleInit {
       const subscription = load
         .pipe(
           mergeMap((id) =>
-            zip(
-              from(
-                this.getReadStream({
-                  streamKey: producerName,
-                  consumerId,
-                  id,
-                  group: event,
-                }),
-              ),
-              of(id),
+            from(
+              this.getReadStream({
+                streamKey: producerName,
+                consumerId,
+                id,
+                group: event,
+              }),
             ),
           ),
 
-          tap(async ([data, prev_id]: [StreamsMessagesReply, string]) => {
-            this.logger.log(
-              `data: ${JSON.stringify(data)}, prev_id: ${prev_id}`,
-            );
-            if (data) {
-              this.logger.log(`messages: ${JSON.stringify(data[0].messages)}`);
-            }
-
+          tap(async (data: StreamsMessagesReply) => {
             const entryId = data && data[0]?.messages[0]?.id;
 
             if (entryId) {
@@ -165,12 +153,7 @@ export class EventsService implements OnModuleInit {
             load.next(`>`);
           }),
 
-          filter(([data]: [StreamsMessagesReply, string]) => data !== null),
-
-          map(
-            ([data]: [StreamsMessagesReply, string]) =>
-              data as NonNullable<StreamsMessagesReply>,
-          ),
+          filter((data: StreamsMessagesReply) => data !== null),
 
           filter((data) => data[0].messages.length > 0),
 
@@ -187,6 +170,7 @@ export class EventsService implements OnModuleInit {
           }),
         );
 
+      // "() => subscription.unsubscribe()" needs to save observer context
       unsubscribeCombiner.add(() => subscription.unsubscribe());
       unsubscribeCombiner.add(delConsumer);
     });
