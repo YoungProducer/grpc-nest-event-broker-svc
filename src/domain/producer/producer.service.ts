@@ -47,8 +47,12 @@ export class ProducerService implements OnModuleInit {
     const isRegistered = await this.isProducerRegistered(name);
 
     if (isRegistered) {
+      const errorMessage = producerServiceErrorMsgs.alreadyRegistered(name);
+
+      this.logger.error(errorMessage);
+
       return {
-        error: 'Producer already exist',
+        error: errorMessage,
         producerId: null,
         status: 400,
       };

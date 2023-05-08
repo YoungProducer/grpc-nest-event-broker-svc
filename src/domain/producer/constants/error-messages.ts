@@ -3,4 +3,6 @@ export const producerServiceErrorMsgs = {
     `Producer with ${isId ? 'id' : 'name'}: ${id} is not registered!`,
   cannotProduceThisEvent: (event: string) =>
     `Producer did not register event: ${event}`,
+  alreadyRegistered: (name: string) =>
+    `Producer with name: ${name} already exist`
 };
