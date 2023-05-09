@@ -1,4 +1,4 @@
-type CombinerFunction = (...args: any[]) => void | Promise<void>;
+export type CombinerFunction = (...args: any[]) => void | Promise<void>;
 
 export const combinerGenerator = <
   F extends CombinerFunction = CombinerFunction,
@@ -20,3 +20,5 @@ export const combinerGenerator = <
     execute,
   };
 };
+
+export type CombinerGenerator = typeof combinerGenerator;
