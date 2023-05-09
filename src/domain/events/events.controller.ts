@@ -1,17 +1,22 @@
 import { Controller } from '@nestjs/common';
-import { EventsService } from './events.service';
 import { GrpcMethod } from '@nestjs/microservices';
+import { Observable } from 'rxjs';
+import { Metadata, ServerUnaryCall } from '@grpc/grpc-js';
+
+import { EventsService } from './events.service';
 import { EVENT_BROKER_SERVICE_NAME } from '../../proto/event-broker.pb';
 import { ProduceEventResponseDto } from './dto/produce-event.response.dto';
 import { ProduceEventRequestDto } from './dto/produce-event.request.dto';
 import { ConsumeEventRequestDto } from './dto/consume-event.request.dto';
-import { Metadata, ServerUnaryCall } from '@grpc/grpc-js';
 import { ConsumeEventResponseDto } from './dto/consume-event.response.dto';
-import { Observable } from 'rxjs';
+import { ConsumerService } from '../consumer/consumer.service';
 
 @Controller()
 export class EventsController {
-  constructor(private readonly eventsService: EventsService) {}
+  constructor(
+    private readonly consumerService: ConsumerService,
+    private readonly eventsService: EventsService,
+  ) {}
 
   @GrpcMethod(EVENT_BROKER_SERVICE_NAME, 'ProduceEvent')
   async produceEvent(
@@ -26,12 +31,13 @@ export class EventsController {
     _metadata: Metadata,
     call: ServerUnaryCall<ConsumeEventRequestDto, ConsumeEventResponseDto>,
   ): Promise<Observable<ConsumeEventResponseDto>> {
-    const { observer, unsubscribe } = await this.eventsService.getEventConsumer(
-      dto,
-    );
+    await this.consumerService.canConsumeEvent(dto);
+
+    const { observable, unsubscribe } =
+      this.eventsService.getStreamObserver(dto);
 
     call.addListener('cancelled', unsubscribe);
 
-    return observer;
+    return observable;
   }
 }

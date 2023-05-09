@@ -1,16 +1,6 @@
 import { Inject, Injectable, OnModuleInit, Logger } from '@nestjs/common';
 import { RedisClientType } from 'redis';
-import {
-  BehaviorSubject,
-  Observable,
-  filter,
-  from,
-  map,
-  mergeMap,
-  tap,
-  zip,
-  of,
-} from 'rxjs';
+import { Observable } from 'rxjs';
 
 import {
   ConsumeEventRequest,
@@ -21,27 +11,23 @@ import {
 import { DI_REDIS } from 'src/infrastucture/redis/constants';
 import { RedisClientModuleGetter } from 'src/infrastucture/redis/interfaces';
 import { EventBrokerEvent } from 'src/types/event';
-import { StreamsMessagesReply } from 'src/types/redis-types';
-import { ConsumerService } from '../consumer/consumer.service';
 import { ProducerService } from '../producer/producer.service';
-import { GetEventConsumerResult } from './interfaces/get-event-consumer.response.interface';
-import { combinerGenerator } from '../../utils/combine-functions';
+import { StreamsManagerService } from '../streams-manager/streams-manager.service';
+import { GetStreamObserverReturn } from './interfaces/get-stream-observer-result';
 
 @Injectable()
 export class EventsService implements OnModuleInit {
-  private redisConsumingClient: RedisClientType;
   private redisProducingClient: RedisClientType;
   private readonly logger = new Logger(EventsService.name);
 
   constructor(
-    private readonly consumerService: ConsumerService,
+    private readonly streamsManagerService: StreamsManagerService,
     private readonly producerService: ProducerService,
     @Inject(DI_REDIS)
     private readonly redisClientGetter: RedisClientModuleGetter,
   ) {}
 
   async onModuleInit(): Promise<void> {
-    this.redisConsumingClient = await this.redisClientGetter();
     this.redisProducingClient = await this.redisClientGetter();
   }
 
@@ -70,93 +56,29 @@ export class EventsService implements OnModuleInit {
     };
   }
 
-  private async getReadStream(streamKey: string, id: string) {
-    return await this.redisConsumingClient.xRead(
-      {
-        key: streamKey,
-        id,
-      },
-      {
-        BLOCK: 1000,
-        COUNT: 1,
-      },
-    );
-  }
-
-  async getEventConsumer({
-    producerName,
+  public getStreamObserver({
     consumerId,
     event,
-  }: ConsumeEventRequest): Promise<GetEventConsumerResult> {
-    await this.consumerService.canConsumeEvent({
-      producerName,
-      consumerId,
-      event,
+    producerName,
+  }: ConsumeEventRequest): GetStreamObserverReturn {
+    const streamKey = this.getStreamKey(producerName, event);
+
+    const observable = new Observable<ConsumeEventResponse>((observer) => {
+      const callback = ({ data }: EventBrokerEvent) => {
+        observer.next({
+          data,
+          error: null,
+          status: 200,
+        });
+      };
+
+      this.streamsManagerService.subscribe(streamKey, consumerId, callback);
     });
 
-    this.logger.log(
-      'Consumer with ID: %s is now consuming event: %s.',
-      consumerId,
-      event,
-    );
+    const unsubscribe = () =>
+      this.streamsManagerService.unsubscribe(streamKey, consumerId);
 
-    const unsubscribeCombiner = combinerGenerator();
-
-    const streamObserver = new Observable<ConsumeEventResponse>((observer) => {
-      const load = new BehaviorSubject('$');
-
-      const subscription = load
-        .pipe(
-          mergeMap((id) =>
-            zip(
-              from(
-                this.getReadStream(this.getStreamKey(producerName, event), id),
-              ),
-              of(id),
-            ),
-          ),
-
-          tap(async ([data, prev_id]: [StreamsMessagesReply, string]) => {
-            const id = data !== null ? data[0].messages[0].id : prev_id;
-
-            load.next(`${id}`);
-          }),
-
-          filter(([data]: [StreamsMessagesReply, string]) => data !== null),
-
-          map(
-            ([data]: [StreamsMessagesReply, string]) =>
-              data as NonNullable<StreamsMessagesReply>,
-          ),
-
-          map(
-            (data: NonNullable<StreamsMessagesReply>) =>
-              data[0].messages[0].message as unknown as EventBrokerEvent,
-          ),
-        )
-        .subscribe(({ data }) =>
-          observer.next({
-            data,
-            error: null,
-            status: 200,
-          }),
-        );
-
-      // "() => subscription.unsubscribe()" needs to save observer context
-      unsubscribeCombiner.add(() => subscription.unsubscribe());
-      unsubscribeCombiner.add(() =>
-        this.logger.log(
-          `Consumer with ID: %s has unsubscribed from event: %s`,
-          consumerId,
-          event,
-        ),
-      );
-    });
-
-    return {
-      observer: streamObserver,
-      unsubscribe: unsubscribeCombiner.execute,
-    };
+    return { observable, unsubscribe };
   }
 
   private getStreamKey(producerName: string, event: string): string {
