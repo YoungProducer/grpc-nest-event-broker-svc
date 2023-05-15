@@ -14,5 +14,5 @@ export class ConsumeEventRequestDto implements ConsumeEventRequest {
 
   @Expose()
   @IsString()
-  consumerId: string;
+  consumerName: string;
 }

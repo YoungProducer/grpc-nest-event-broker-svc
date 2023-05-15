@@ -1,5 +1,4 @@
-import { Inject, Injectable, OnModuleInit, Logger } from '@nestjs/common';
-import { RedisClientType } from 'redis';
+import { Injectable, Logger } from '@nestjs/common';
 import { Observable } from 'rxjs';
 
 import {
@@ -8,28 +7,19 @@ import {
   ProduceEventRequest,
   ProduceEventResponse,
 } from 'src/proto/event-broker.pb';
-import { DI_REDIS } from 'src/infrastucture/redis/constants';
-import { RedisClientModuleGetter } from 'src/infrastucture/redis/interfaces';
 import { EventBrokerEvent } from 'src/types/event';
 import { ProducerService } from '../producer/producer.service';
-import { StreamsManagerService } from '../streams-manager/streams-manager.service';
 import { GetStreamObserverReturn } from './interfaces/get-stream-observer-result';
+import { StreamService } from '../stream/stream.service';
 
 @Injectable()
-export class EventsService implements OnModuleInit {
-  private redisProducingClient: RedisClientType;
+export class EventsService {
   private readonly logger = new Logger(EventsService.name);
 
   constructor(
-    private readonly streamsManagerService: StreamsManagerService,
     private readonly producerService: ProducerService,
-    @Inject(DI_REDIS)
-    private readonly redisClientGetter: RedisClientModuleGetter,
+    private readonly streamService: StreamService,
   ) {}
-
-  async onModuleInit(): Promise<void> {
-    this.redisProducingClient = await this.redisClientGetter();
-  }
 
   async produceEvent({
     data,
@@ -38,11 +28,7 @@ export class EventsService implements OnModuleInit {
   }: ProduceEventRequest): Promise<ProduceEventResponse> {
     await this.producerService.canProduceEvent(producerName, event);
 
-    await this.redisProducingClient.xAdd(
-      this.getStreamKey(producerName, event),
-      '*',
-      { data },
-    );
+    this.streamService.produceEvent({ event, data });
 
     this.logger.log(
       'Event %s was producer by producer: %s',
@@ -57,12 +43,9 @@ export class EventsService implements OnModuleInit {
   }
 
   public getStreamObserver({
-    consumerId,
+    consumerName,
     event,
-    producerName,
   }: ConsumeEventRequest): GetStreamObserverReturn {
-    const streamKey = this.getStreamKey(producerName, event);
-
     const observable = new Observable<ConsumeEventResponse>((observer) => {
       const callback = ({ data }: EventBrokerEvent) => {
         observer.next({
@@ -72,16 +55,12 @@ export class EventsService implements OnModuleInit {
         });
       };
 
-      this.streamsManagerService.subscribe(streamKey, consumerId, callback);
+      this.streamService.subscribeToEvent({ event, consumerName, callback });
     });
 
     const unsubscribe = () =>
-      this.streamsManagerService.unsubscribe(streamKey, consumerId);
+      this.streamService.unsubscribeFromEvent({ event, consumerName });
 
     return { observable, unsubscribe };
-  }
-
-  private getStreamKey(producerName: string, event: string): string {
-    return `${producerName}:${event}`;
   }
 }

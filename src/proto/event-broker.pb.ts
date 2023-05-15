@@ -85,7 +85,7 @@ export interface ProduceEventResponse {
 
 export interface ConsumeEventRequest {
   producerName: string;
-  consumerId: string;
+  consumerName: string;
   event: string;
 }
 

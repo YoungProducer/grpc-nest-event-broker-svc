@@ -87,21 +87,24 @@ export class ConsumerService implements OnModuleInit {
 
   async canConsumeEvent({
     producerName,
-    consumerId,
+    consumerName,
     event,
   }: ConsumeEventRequestDto): Promise<true> {
-    const consumer = (await this.redisClient.json.get(
-      this.getConsumerJSONKey(consumerId),
-    )) as unknown as ConsumerIndex;
+    const searchRes = await this.redisClient.ft.search(
+      'idx:consumers',
+      `@name:${consumerName}`,
+    );
+
+    const consumer = searchRes.documents[0].value as unknown as ConsumerIndex;
 
     if (!consumer)
       throw new RpcException(
-        consumerServiceErrorMsgs.notRegistered(consumerId),
+        consumerServiceErrorMsgs.notRegistered(consumerName),
       );
 
     if (!consumer.events.includes(event))
       throw new RpcException(
-        consumerServiceErrorMsgs.eventNotRegistered(consumerId, event),
+        consumerServiceErrorMsgs.eventNotRegistered(consumerName, event),
       );
 
     return await this.producerService.canProduceEvent(producerName, event);
